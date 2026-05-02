@@ -38,6 +38,7 @@ All notable changes to NoDB-DomainPark will be documented in this file.
 - **adm/check.php**: Separated Settings and Friendship Links into different views via URL parameters (`?set=on` / `?links=on`); navigation links updated accordingly
 - **index.php**: Same-IP deduplication - if current IP matches the last useragent record's IP, click count does not increment and no duplicate record is added
 - **index.php**: Added `getRealIp()` function to retrieve real visitor IP behind Cloudflare/CDN proxies (prioritizes `HTTP_CF_CONNECTING_IP`, `HTTP_X_FORWARDED_FOR`, `HTTP_X_REAL_IP`)
+- **index.php**: Fixed line breaks in About field - now properly renders newline characters as `<br>` tags in frontend display
 - **README.md**: Merged chinese.txt and english.txt into bilingual README with Requirements section (PHP 5.4.0+, Cloudflare country code support, no database/extensions needed)
 - **All PHP files**: Added author attribution comment header
 
@@ -60,3 +61,4 @@ All notable changes to NoDB-DomainPark will be documented in this file.
 ## Author
 - **max-godman** - max_godman@foxmail.com
 - GitHub: https://github.com/max-godman
+
