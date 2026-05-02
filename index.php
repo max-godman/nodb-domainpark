@@ -158,7 +158,9 @@ if ($type == 0 || $type == 1) {
         <div class="container">
             <h1><?php echo htmlspecialchars($title); ?></h1>
             <p><?php 
-            echo str_replace('<Br>', '<br>', htmlspecialchars($about, ENT_NOQUOTES));
+            // 
+            $formattedAbout = nl2br(htmlspecialchars($about, ENT_NOQUOTES));
+            echo str_replace('<Br>', '<br>', $formattedAbout);
             ?></p>
             
             <?php if (file_exists(__DIR__ . '/inc/link.php')): ?>
