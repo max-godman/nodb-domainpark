@@ -3,29 +3,44 @@
  * NoDB-DomainPark
  * Author: max-godman (max_godman@foxmail.com)
  * GitHub: https://github.com/max-godman
+ * 
+ * Domain management page
+ * Handles domain parking configuration, including adding, editing, and deleting domains
  */
 
+// Start session for message handling
 session_start();
 
+// Check if installation is completed
 if (!file_exists(__DIR__ . '/../inc/sys_admin.php')) {
     header("Location: ../setup.php");
     exit();
 }
 
+// Load admin configuration and SHA256 utility
 require_once __DIR__ . '/../inc/sys_admin.php';
 require_once __DIR__ . '/../inc/inc-sha.php';
 
+/**
+ * Validate admin login status
+ * Checks if authentication cookies match the stored admin configuration
+ * 
+ * @return bool True if logged in, false otherwise
+ */
 function validateLogin() {
     global $admin_config;
     
+    // Check if required cookies exist
     if (!isset($_COOKIE['userid']) || !isset($_COOKIE['userint'])) {
         return false;
     }
     
+    // Verify userid matches admin configuration
     if ($_COOKIE['userid'] !== $admin_config['userid']) {
         return false;
     }
     
+    // Verify userint (dynamic value) matches admin configuration
     if ($_COOKIE['userint'] !== $admin_config['userint']) {
         return false;
     }
@@ -33,25 +48,31 @@ function validateLogin() {
     return true;
 }
 
+// Redirect to login if not authenticated
 if (!validateLogin()) {
     header("Location: login.php");
     exit();
 }
 
+// Load domain configuration
 if (file_exists(__DIR__ . '/../inc/domain.php')) {
     require_once __DIR__ . '/../inc/domain.php';
 } else {
     $domains = [];
 }
 
+// Handle form submissions (add, update, delete domains)
 $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action']) && $_POST['action'] === 'add') {
+        // Add new domain
         $domain = trim(strtolower($_POST['domain'] ?? ''));
         if (!empty($domain)) {
+            // Clean domain input (remove protocol and www)
             $domain = preg_replace('#^https?://(www\.)?#', '', $domain);
             $domain = rtrim($domain, '/');
             
+            // Check if domain already exists
             $exists = false;
             foreach ($domains as &$d) {
                 if ($d['domain'] === $domain) {
@@ -61,14 +82,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             if (!$exists) {
+                // Set default values for new domain
                 $title = !empty($_POST['title']) ? trim($_POST['title']) : $domain;
                 $about = trim($_POST['about'] ?? '');
                 $url = trim($_POST['url'] ?? '');
-                $userdata = 10;
+                $userdata = 10; // Default number of visit records to keep
                 
+                // Create new domain configuration
                 $newDomain = [
                     'domain' => $domain,
-                    'type' => 1,
+                    'type' => 1, // Pending status by default
                     'title' => $title,
                     'about' => $about,
                     'url' => $url,
@@ -77,7 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $domains[] = $newDomain;
                 
-                $dataFile = __DIR__ . "/../data/{$domain}";
+                // Create data file for click tracking (.log extension for security)
+                $dataFile = __DIR__ . "/../data/{$domain}.log";
                 if (!file_exists($dataFile)) {
                     $domainData = [
                         'click' => 0,
@@ -94,19 +118,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Domain is required.";
         }
     } elseif (isset($_POST['action']) && $_POST['action'] === 'update') {
+        // Update existing domain
         $index = intval($_POST['index'] ?? -1);
         if ($index >= 0 && $index < count($domains)) {
             $domain = trim(strtolower($_POST['domain'] ?? ''));
             if (!empty($domain)) {
+                // Note: Domain field is read-only in edit form, so this validation is just a safety check
                 $domain = preg_replace('#^https?://(www\.)?#', '', $domain);
                 $domain = rtrim($domain, '/');
                 
+                // Get form values with validation
                 $type = intval($_POST['type'] ?? $domains[$index]['type']);
                 $title = !empty($_POST['title']) ? trim($_POST['title']) : $domain;
                 $about = trim($_POST['about'] ?? '');
                 $url = trim($_POST['url'] ?? '');
                 $userdata = !empty($_POST['userdata']) ? intval($_POST['userdata']) : 10;
                 
+                // Validate required fields based on domain type
                 $isValid = true;
                 $errorMessage = '';
                 
@@ -121,15 +149,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 if ($isValid) {
-                    $oldDomain = $domains[$index]['domain'];
-                    if ($oldDomain !== $domain) {
-                        $oldDataFile = __DIR__ . "/../data/{$oldDomain}";
-                        $newDataFile = __DIR__ . "/../data/{$domain}";
-                        if (file_exists($oldDataFile)) {
-                            rename($oldDataFile, $newDataFile);
-                        }
-                    }
+                    // Domain field is read-only, so keep original domain name
+                    $domain = $domains[$index]['domain'];
                     
+                    // Update domain configuration
                     $domains[$index] = [
                         'domain' => $domain,
                         'type' => $type,
@@ -148,14 +171,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif (isset($_POST['action']) && $_POST['action'] === 'delete') {
+        // Delete domain (only allowed for Disabled status)
         $index = intval($_POST['index'] ?? -1);
         if ($index >= 0 && $index < count($domains)) {
             if ($domains[$index]['type'] == 0) {
                 $domainToDelete = $domains[$index]['domain'];
                 unset($domains[$index]);
-                $domains = array_values($domains);
+                $domains = array_values($domains); // Re-index array
                 
-                $dataFile = __DIR__ . "/../data/{$domainToDelete}";
+                // Delete associated data file
+                $dataFile = __DIR__ . "/../data/{$domainToDelete}.log";
                 if (file_exists($dataFile)) {
                     unlink($dataFile);
                 }
@@ -167,6 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // Save updated domain configuration
     $domainConfig = "<?php\n";
     $domainConfig .= "/**\n * Domain configuration\n * Automatically generated\n */\n";
     $domainConfig .= "\$domains = " . var_export($domains, true) . ";\n";
@@ -174,23 +200,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     file_put_contents(__DIR__ . '/../inc/domain.php', $domainConfig);
 }
 
+// Handle AJAX request for visit records
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_visits') {
     $domain = trim($_POST['domain'] ?? '');
-    $dataFile = __DIR__ . "/../data/{$domain}";
+    $dataFile = __DIR__ . "/../data/{$domain}.log";
     
+    // Set JSON response header
     header('Content-Type: application/json');
     
+    // Check if data file exists
     if (!file_exists($dataFile)) {
         echo json_encode(['error' => 'No data file found']);
         exit();
     }
     
+    // Load and decode domain data
     $domainData = json_decode(file_get_contents($dataFile), true);
     if (!is_array($domainData) || empty($domainData['useragent'])) {
         echo json_encode(['error' => 'No visit records']);
         exit();
     }
     
+    // Return visit records as JSON
     echo json_encode(['records' => $domainData['useragent']]);
     exit();
 }
@@ -268,7 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <button type="submit">Add Domain</button>
         </form>
         
-        <h2>Existing Domains <button onclick="location.reload();" style="margin-left: 10px; font-size: 14px; padding: 5px 10px;">Refresh</button></h2>
+        <h2>Existing Domains[<?php echo count($domains); ?>] <button onclick="location.reload();" style="margin-left: 10px; font-size: 14px; padding: 5px 10px;">Refresh</button></h2>
         <?php if (empty($domains)): ?>
             <p>No domains configured yet.</p>
         <?php else: ?>
@@ -296,7 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <td><?php echo htmlspecialchars($domain['title']); ?></td>
                             <td>
                                 <?php 
-                                $dataFile = __DIR__ . "/../data/{$domain['domain']}";
+                                $dataFile = __DIR__ . "/../data/{$domain['domain']}.log";
                                 $clickCount = 0;
                                 if (file_exists($dataFile)) {
                                     $domainData = json_decode(file_get_contents($dataFile), true);
@@ -326,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <input type="hidden" name="index" id="editIndex">
                 <div class="form-group">
                     <label for="edit_domain">Domain:</label>
-                    <input type="text" id="edit_domain" name="domain" required>
+                    <input type="text" id="edit_domain" name="domain" readonly>
                 </div>
                 <div class="form-group">
                     <label for="edit_type">Status:</label>
