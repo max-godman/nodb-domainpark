@@ -3,35 +3,50 @@
  * NoDB-DomainPark
  * Author: max-godman (max_godman@foxmail.com)
  * GitHub: https://github.com/max-godman
+ * 
+ * Setup script for initial installation
+ * This script handles the first-time setup of the domain parking system
  */
 
+// Check if admin configuration file already exists
+// If it exists, exit silently (installation already completed)
 if (file_exists(__DIR__ . '/inc/sys_admin.php')) {
     exit();
 }
 
+// Include SHA256 encryption utility
 require_once __DIR__ . '/inc/inc-sha.php';
 
+// Get current host from HTTP request and clean it
+// Remove port number, protocol (http/https), and www prefix
 $currentHost = $_SERVER['HTTP_HOST'] ?? 'your-domain.com';
 $currentHost = preg_replace('/:\d+$/', '', $currentHost);
 $currentHost = preg_replace('#^https?://(www\.)?#', '', strtolower($currentHost));
 $currentHost = rtrim($currentHost, '/');
 
+// Handle form submission for installation
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Get admin username and domain from POST data
     $userid = trim($_POST['userid'] ?? '');
     $userdomain = trim($_POST['userdomain'] ?? '');
     
+    // Validate required fields
     if (empty($userid) || empty($userdomain)) {
         $error = "Admin username and domain are required.";
     } else {
+        // Generate password: username + current date (YYMMDD)
         $datePart = date('ymd');
         $rawPassword = $userid . $datePart;
         $userpwd = sha256_hash($rawPassword);
         
+        // Generate dynamic value for session security (YYMMDDHHMM)
         $userint = date('ymdHi');
         
+        // Clean the admin domain input (remove protocol and www)
         $userdomain = preg_replace('#^https?://(www\.)?#', '', strtolower($userdomain));
         $userdomain = rtrim($userdomain, '/');
         
+        // Create admin configuration content
         $adminConfig = "<?php\n";
         $adminConfig .= "/**\n * Admin configuration\n * Auto-generated, do not modify manually\n */\n";
         $adminConfig .= "\$admin_config = [\n";
@@ -42,8 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $adminConfig .= "];\n";
         $adminConfig .= "?>";
         
+        // Write admin configuration file
         file_put_contents(__DIR__ . '/inc/sys_admin.php', $adminConfig);
         
+        // Clean up old data files during reinstallation
         if (file_exists(__DIR__ . '/inc/domain.php')) {
             unlink(__DIR__ . '/inc/domain.php');
         }
@@ -57,8 +74,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
+        // Create empty domain configuration file
         file_put_contents(__DIR__ . '/inc/domain.php', "<?php\n\$domains = [];\n?>");
         
+        // Redirect to login page after successful installation
         header("Location: adm/login.php");
         exit();
     }
@@ -102,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit">Initialize Setup</button>
     </form>
     
-    <p><strong>Note:</strong> Password will be automatically generated as <code>username + YYMMDD</code> (e.g., admin260501)</p>
+    <p><strong>Note:</strong> Password will be automatically generated as <code>username + YYMMDD</code> (e.g., admin<?php echo date('ymd'); ?>)</p>
 <div style="text-align:center;padding:15px;">NoDB-DomainPark &copy; 2026</div>
 </body>
 </html>
