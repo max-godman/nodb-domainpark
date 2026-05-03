@@ -128,4 +128,4 @@ A lightweight domain parking system with zero database dependency - file-based s
 
 ---
 
-**Contact / 联系方式**: max_godman@foxmail.com
+
