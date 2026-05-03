@@ -3,63 +3,84 @@
  * NoDB-DomainPark
  * Author: max-godman (max_godman@foxmail.com)
  * GitHub: https://github.com/max-godman
+ * 
+ * Admin login page
+ * Handles administrator authentication and session management
  */
 
+// Start session for login attempts tracking
 session_start();
 
+// Check if installation is completed
 if (!file_exists(__DIR__ . '/../inc/sys_admin.php')) {
     header("Location: ../setup.php");
     exit();
 }
 
+// Load admin configuration and SHA256 utility
 require_once __DIR__ . '/../inc/sys_admin.php';
 require_once __DIR__ . '/../inc/inc-sha.php';
 
+// Get current host and clean it (remove www prefix)
 $currentHost = $_SERVER['HTTP_HOST'] ?? '';
 $currentHost = preg_replace('#^www\.#', '', strtolower($currentHost));
 $currentHost = rtrim($currentHost, '/');
 
+// Verify that login is accessed through the correct admin domain
 $adminDomain = $admin_config['userdomain'];
 if ($currentHost !== $adminDomain && !preg_match('/^.*\.' . preg_quote($adminDomain, '/') . '$/', $currentHost)) {
+    // Access denied - return blank page
     exit();
 }
 
+// Handle logout request
 if (isset($_GET['logout']) && $_GET['logout'] == '1') {
+    // Clear authentication cookies
     setcookie('userid', '', time() - 3600, '/');
     setcookie('userint', '', time() - 3600, '/');
+    // Set success message in session
     $_SESSION['logout_success'] = true;
     header("Location: login.php");
     exit();
 }
 
+// Initialize login attempts counter
 if (!isset($_SESSION['login_attempts'])) {
     $_SESSION['login_attempts'] = 0;
     $_SESSION['last_attempt_day'] = date('Y-m-d');
 }
 
+// Reset daily login attempts counter
 if ($_SESSION['last_attempt_day'] !== date('Y-m-d')) {
     $_SESSION['login_attempts'] = 0;
     $_SESSION['last_attempt_day'] = date('Y-m-d');
 }
 
+// Check if login is restricted due to too many failed attempts (5 per day limit)
 $loginRestricted = ($_SESSION['login_attempts'] >= 5);
 
+// Handle login form submission
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$loginRestricted) {
     $inputUserid = trim($_POST['userid'] ?? '');
     $inputPassword = trim($_POST['password'] ?? '');
     $rememberMe = isset($_POST['remember_me']);
     
+    // Validate required fields
     if (empty($inputUserid) || empty($inputPassword)) {
         $error = "Username and password are required.";
     } else {
+        // Verify username matches admin configuration
         if ($inputUserid === $admin_config['userid']) {
+            // Hash input password and compare with stored hash
             $inputHash = sha256_hash($inputPassword);
             
             if ($inputHash === $admin_config['userpwd']) {
+                // Login successful - update dynamic value for session security
                 $newUserint = date('ymdHi');
                 $admin_config['userint'] = $newUserint;
                 
+                // Update admin configuration file with new dynamic value
                 $updatedConfig = "<?php\n";
                 $updatedConfig .= "/**\n * Admin configuration\n * Auto-generated, do not modify manually\n */\n";
                 $updatedConfig .= "\$admin_config = [\n";
@@ -72,20 +93,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$loginRestricted) {
                 
                 file_put_contents(__DIR__ . '/../inc/sys_admin.php', $updatedConfig);
                 
-                $cookieExpire = $rememberMe ? time() + (30 * 24 * 3600) : 0;
+                // Set authentication cookies
+                $cookieExpire = $rememberMe ? time() + (30 * 24 * 3600) : 0; // 30 days or session-only
                 setcookie('userid', $inputUserid, $cookieExpire, '/');
                 setcookie('userint', $newUserint, $cookieExpire, '/');
                 
+                // Redirect to domain management page
                 header("Location: dm.php");
                 exit();
             }
         }
         
+        // Login failed - increment attempt counter
         $_SESSION['login_attempts']++;
         $error = "Invalid username or password.";
     }
 }
 
+// Handle logout success message
 if (isset($_SESSION['logout_success'])) {
     $successMessage = "Successfully logged out.";
     unset($_SESSION['logout_success']);
