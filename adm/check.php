@@ -3,29 +3,44 @@
  * NoDB-DomainPark
  * Author: max-godman (max_godman@foxmail.com)
  * GitHub: https://github.com/max-godman
+ * 
+ * Admin settings page
+ * Handles password changes, domain updates, and friendship links management
  */
 
+// Start session for message handling
 session_start();
 
+// Check if installation is completed
 if (!file_exists(__DIR__ . '/../inc/sys_admin.php')) {
     header("Location: ../setup.php");
     exit();
 }
 
+// Load admin configuration and SHA256 utility
 require_once __DIR__ . '/../inc/sys_admin.php';
 require_once __DIR__ . '/../inc/inc-sha.php';
 
+/**
+ * Validate admin login status
+ * Checks if authentication cookies match the stored admin configuration
+ * 
+ * @return bool True if logged in, false otherwise
+ */
 function validateLogin() {
     global $admin_config;
     
+    // Check if required cookies exist
     if (!isset($_COOKIE['userid']) || !isset($_COOKIE['userint'])) {
         return false;
     }
     
+    // Verify userid matches admin configuration
     if ($_COOKIE['userid'] !== $admin_config['userid']) {
         return false;
     }
     
+    // Verify userint (dynamic value) matches admin configuration
     if ($_COOKIE['userint'] !== $admin_config['userint']) {
         return false;
     }
@@ -33,42 +48,52 @@ function validateLogin() {
     return true;
 }
 
+// Redirect to login if not authenticated
 if (!validateLogin()) {
     header("Location: login.php");
     exit();
 }
 
+// Determine which section to display based on URL parameters
 $showSettings = isset($_GET['set']) && $_GET['set'] === 'on';
 $showLinks = isset($_GET['links']) && $_GET['links'] === 'on';
 
+// Default to Settings section if no parameters specified
 if (!$showSettings && !$showLinks) {
     $showSettings = true;
 }
 
 $message = '';
 
+// Handle password and domain change form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'change_password') {
     $oldPassword = trim($_POST['old_password'] ?? '');
     $newPassword = trim($_POST['new_password'] ?? '');
     $newUserdomain = trim($_POST['new_userdomain'] ?? '');
     
+    // Validate old password is provided
     if (empty($oldPassword)) {
         $message = "Old password is required.";
     } else {
+        // Verify old password by comparing SHA256 hash
         if (sha256_hash($oldPassword) !== $admin_config['userpwd']) {
             $message = "Invalid old password.";
         } else {
+            // Determine new password (use existing if empty)
             if (!empty($newPassword)) {
                 $newUserpwd = sha256_hash($newPassword);
             } else {
                 $newUserpwd = $admin_config['userpwd'];
             }
             
+            // Generate new dynamic value for session security
             $newUserint = date('ymdHi');
             
+            // Clean new admin domain input
             $newUserdomain = preg_replace('#^https?://(www\.)?#', '', strtolower($newUserdomain));
             $newUserdomain = rtrim($newUserdomain, '/');
             
+            // Update admin configuration
             $updatedConfig = "<?php\n";
             $updatedConfig .= "/**\n * Admin configuration\n * Auto-generated, do not modify manually\n */\n";
             $updatedConfig .= "\$admin_config = [\n";
@@ -81,15 +106,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             
             file_put_contents(__DIR__ . '/../inc/sys_admin.php', $updatedConfig);
             
+            // Clear old authentication cookies
             setcookie('userid', '', time() - 3600, '/');
             setcookie('userint', '', time() - 3600, '/');
             
+            // Redirect to new admin domain login page
             header("Location: https://$newUserdomain/adm/login.php");
             exit();
         }
     }
 }
 
+// Load existing friendship links
 $linkContent = "<!-- txt -->";
 if (file_exists(__DIR__ . '/../inc/link.php')) {
     ob_start();
@@ -97,15 +125,19 @@ if (file_exists(__DIR__ . '/../inc/link.php')) {
     $linkContent = ob_get_clean();
 }
 
+// Handle single link addition
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_link') {
     $linkText = trim($_POST['link_text'] ?? '');
     $linkUrl = trim($_POST['link_url'] ?? '');
     
+    // Validate required fields
     if (empty($linkText) || empty($linkUrl)) {
         $message = "Link text and URL are required.";
     } else {
+        // Format link as HTML list item
         $newLink = '<li><a href="' . htmlspecialchars($linkUrl) . '" target="_blank">' . htmlspecialchars($linkText) . '</a></li>';
         
+        // Append to existing links
         $existingContent = '';
         if ($linkContent !== "<!-- txt -->") {
             $existingContent = $linkContent;
@@ -114,15 +146,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $updatedContent = $existingContent . "\n" . $newLink;
         $linkContent = $updatedContent;
         
+        // Save updated links
         file_put_contents(__DIR__ . '/../inc/link.php', "<?php echo <<<'EOF'\n" . trim($updatedContent) . "\nEOF;\n?>");
         
         $message = "Link added successfully.";
     }
 }
 
+// Handle bulk links update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_links') {
     $newLinks = trim($_POST['links'] ?? '');
     
+    // Handle empty submission (reset to default)
     if (empty($newLinks)) {
         $linkContent = "<!-- txt -->";
         file_put_contents(__DIR__ . '/../inc/link.php', "<?php echo \"<!-- txt -->\"; ?>");
